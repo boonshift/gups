@@ -11,14 +11,21 @@ fn main() -> io::Result<()> {
 
     println!("Base Dir: {}", base_dir);
 
+    let dirs = get_dirs(base_dir);
+
+    for e in dirs {
+        println!("dir: {}", e.file_name().to_str().unwrap());
+    }
+
+    Ok(())
+}
+
+fn get_dirs(base_dir: &str) -> Vec<DirEntry> {
     let dirs = fs::read_dir(base_dir).unwrap()
         .filter_map(Result::ok)
         .filter({
             |e| e.file_type().unwrap().is_dir()
         });
 
-    dirs.for_each(|e: DirEntry|
-        println!("dir: {}", e.file_name().to_str().unwrap()));
-
-    Ok(())
+    return dirs.collect();
 }
