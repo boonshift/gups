@@ -41,6 +41,9 @@ fn main() -> io::Result<()> {
     let printer = thread::spawn(move || {
         loop {
             let msg = rx.recv().unwrap();
+            if msg.as_str().eq("Bye") {
+                break;
+            }
             println!("Received: {}", msg);
         }
     });
@@ -50,6 +53,7 @@ fn main() -> io::Result<()> {
         child.join().expect("oops! the child thread panicked");
     }
 
+    tx.send(String::from("Bye")).unwrap();
     let _ = printer.join();
 
     Ok(())
