@@ -1,7 +1,17 @@
 use std::{env, fs, io, thread};
 use std::fs::DirEntry;
-use std::sync::mpsc::{Sender, Receiver};
+use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, Sender};
 use std::sync::mpsc;
+
+use git2::Repository;
+
+struct GitUpResult {
+    repo_name: String,
+    is_dirty: bool,
+    branch: String,
+    messages: String,
+}
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -14,7 +24,7 @@ fn main() -> io::Result<()> {
     println!("Base Dir: {}", base_dir);
 
     let dirs = get_dirs(base_dir);
-    let (tx, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
+    let (tx, rx): (Sender<GitUpResult>, Receiver<GitUpResult>) = mpsc::channel();
     let mut children = Vec::new();
 
     for e in dirs {
@@ -22,29 +32,17 @@ fn main() -> io::Result<()> {
         let thread_tx = tx.clone();
 
         let child = thread::spawn(move || {
-            let dir_name_string = e.file_name();
-            let dir_name = dir_name_string.to_str().clone().unwrap();
-
-            // The thread takes ownership over `thread_tx`
-            // Each thread queues a message in the channel
-            let msg = format!("hello from {}", dir_name);
-            thread_tx.send(msg).unwrap();
-
-            // Sending is a non-blocking operation, the thread will continue
-            // immediately after sending its message
-//            println!("thread {} finished", dir_name);
+            let path_buf = e.path();
+            explore_dir(path_buf, thread_tx);
         });
 
         children.push(child);
     }
+    drop(tx);
 
     let printer = thread::spawn(move || {
-        loop {
-            let msg = rx.recv().unwrap();
-            if msg.as_str().eq("Bye") {
-                break;
-            }
-            println!("Received: {}", msg);
+        while let Ok(result) = rx.recv() {
+            println!("Received from {}: {}", result.repo_name, result.messages);
         }
     });
 
@@ -53,7 +51,6 @@ fn main() -> io::Result<()> {
         child.join().expect("oops! the child thread panicked");
     }
 
-    tx.send(String::from("Bye")).unwrap();
     let _ = printer.join();
 
     Ok(())
@@ -67,4 +64,32 @@ fn get_dirs(base_dir: &str) -> Vec<DirEntry> {
         });
 
     return dirs.collect();
+}
+
+fn explore_dir(dir: PathBuf, tx: Sender<GitUpResult>) {
+    let dir_path = dir.to_str().unwrap();
+    let git_path = format!("{}/.git", dir_path);
+    if !Path::new(&git_path).exists() {
+        drop(tx);
+        return;
+    }
+
+    let repo = match Repository::open(dir_path) {
+        Ok(repo) => repo,
+        Err(e) => panic!("Failed to open: {}", e)
+    };
+
+    let head = repo.head().unwrap();
+    let name = head.name().unwrap();
+    let messages = String::new();
+
+    let result = GitUpResult {
+        repo_name: dir_path.to_string(),
+        is_dirty: true,
+        branch: name.to_string(),
+        messages,
+    };
+
+    tx.send(result).unwrap();
+    drop(tx);
 }
