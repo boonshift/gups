@@ -1,11 +1,13 @@
 use std::{env, fs, io, thread};
 use std::fs::DirEntry;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::mpsc;
-
-use git2::Repository;
 use std::thread::JoinHandle;
+use std::time::Instant;
+
+use git2::{Repository, StatusOptions};
 
 struct GitUpResult {
     repo_name: String,
@@ -54,8 +56,11 @@ fn main() -> io::Result<()> {
 
 fn pass_recv_to_printer(rx: Receiver<GitUpResult>) -> JoinHandle<()> {
     return thread::spawn(move || {
-        while let Ok(result) = rx.recv() {
-            println!("Received from {}: {}", result.repo_name, result.messages);
+        while let Ok(r) = rx.recv() {
+            if r.is_dirty {
+                print!("**** ");
+            }
+            println!("Received from {} [{}]: {}", r.repo_name, r.branch, r.messages);
         }
     });
 }
@@ -85,15 +90,37 @@ fn explore_dir(dir: PathBuf, tx: Sender<GitUpResult>) {
 
     let head = repo.head().unwrap();
     let name = head.name().unwrap();
-    let messages = String::new();
+    let mut messages = String::new();
+    let mut is_dirty = true;
+    if is_clean(&repo) {
+        is_dirty = false;
+        let start = Instant::now();
+
+        Command::new("zsh").current_dir(dir_path)
+            .arg("-i").arg("-c")
+            .arg("gfa && gup; exit")
+            .output()
+            .expect("Failed to execute zsh.");
+
+        let elapsed = start.elapsed();
+        let secs = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
+        messages.push_str(format!("Updated in {} secs", secs).as_str());
+    }
 
     let result = GitUpResult {
         repo_name: dir_path.to_string(),
-        is_dirty: true,
+        is_dirty,
         branch: name.to_string(),
         messages,
     };
 
+
     tx.send(result).unwrap();
     drop(tx);
+}
+
+fn is_clean(repo: &Repository) -> bool {
+    let mut status_options: StatusOptions = StatusOptions::new();
+    let statuses = repo.statuses(Some(&mut status_options)).unwrap();
+    return statuses.is_empty();
 }
