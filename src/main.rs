@@ -5,6 +5,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::mpsc;
 
 use git2::Repository;
+use std::thread::JoinHandle;
 
 struct GitUpResult {
     repo_name: String,
@@ -28,7 +29,6 @@ fn main() -> io::Result<()> {
     let mut children = Vec::new();
 
     for e in dirs {
-//        println!("dir: {}", e.file_name().to_str().unwrap());
         let thread_tx = tx.clone();
 
         let child = thread::spawn(move || {
@@ -40,11 +40,7 @@ fn main() -> io::Result<()> {
     }
     drop(tx);
 
-    let printer = thread::spawn(move || {
-        while let Ok(result) = rx.recv() {
-            println!("Received from {}: {}", result.repo_name, result.messages);
-        }
-    });
+    let printer = pass_recv_to_printer(rx);
 
     // Wait for the threads to complete any remaining work
     for child in children {
@@ -54,6 +50,14 @@ fn main() -> io::Result<()> {
     let _ = printer.join();
 
     Ok(())
+}
+
+fn pass_recv_to_printer(rx: Receiver<GitUpResult>) -> JoinHandle<()> {
+    return thread::spawn(move || {
+        while let Ok(result) = rx.recv() {
+            println!("Received from {}: {}", result.repo_name, result.messages);
+        }
+    });
 }
 
 fn get_dirs(base_dir: &str) -> Vec<DirEntry> {
