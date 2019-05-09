@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use colored::Colorize;
 use git2::{Repository, StatusOptions};
 
 struct GitUpResult {
@@ -96,15 +97,16 @@ fn explore_dir(dir: PathBuf, tx: Sender<GitUpResult>) {
         is_dirty = false;
         let start = Instant::now();
 
-        Command::new("zsh").current_dir(dir_path)
+        let output = Command::new("zsh").current_dir(dir_path)
             .arg("-i").arg("-c")
-            .arg("gfa && gup; exit")
+            .arg("gfa >/dev/null 2>&1 && gup | grep '^Updating'; exit")
             .output()
             .expect("Failed to execute zsh.");
+        let std_output = String::from_utf8(output.stdout).unwrap();
 
         let elapsed = start.elapsed();
         let secs = (elapsed.as_secs() as f64) + (elapsed.subsec_nanos() as f64 / 1000_000_000.0);
-        messages.push_str(format!("Updated in {} secs", secs).as_str());
+        messages.push_str(format!("Updated in {} secs: {}", secs, std_output.trim().yellow()).as_str());
     }
 
     let result = GitUpResult {
