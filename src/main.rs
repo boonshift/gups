@@ -59,9 +59,11 @@ fn pass_recv_to_printer(rx: Receiver<GitUpResult>) -> JoinHandle<()> {
     return thread::spawn(move || {
         while let Ok(r) = rx.recv() {
             if r.is_dirty {
-                print!("**** ");
+                print!("{}", "**** ".red());
             }
-            println!("Received from {} [{}]: {}", r.repo_name, r.branch, r.messages);
+
+            let branch = if r.branch != "refs/heads/master" { r.branch.as_str().cyan() } else { r.branch.as_str().green() };
+            println!("Received from {} [{}]: {}", r.repo_name, branch, r.messages);
         }
     });
 }
