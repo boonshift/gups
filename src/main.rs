@@ -1,5 +1,5 @@
 use std::{env, fs, io, thread};
-use std::fs::DirEntry;
+use std::fs::{DirEntry, FileType};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{Receiver, Sender};
@@ -72,7 +72,10 @@ fn get_dirs(base_dir: &str) -> Vec<DirEntry> {
     let dirs = fs::read_dir(base_dir).unwrap()
         .filter_map(Result::ok)
         .filter({
-            |e| e.file_type().unwrap().is_dir()
+            |e| -> bool {
+                let file_type: FileType = e.file_type().unwrap();
+                file_type.is_dir() || file_type.is_symlink()
+            }
         });
 
     return dirs.collect();
