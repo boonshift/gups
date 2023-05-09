@@ -94,7 +94,11 @@ fn explore_dir(dir: PathBuf, tx: Sender<GitUpResult>) {
         Err(e) => panic!("Failed to open: {}", e)
     };
 
-    let head = repo.head().unwrap();
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(e) => panic!("Failed to get head for {}.", dir_path)
+    };
+
     let name = head.name().unwrap();
     let mut messages = String::new();
     let mut is_dirty = true;
